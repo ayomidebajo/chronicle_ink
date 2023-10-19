@@ -2,12 +2,12 @@
 
 #[ink::contract]
 pub mod chronicle_contracts {
-    use ink::prelude::vec::Vec;
+    use ink::{prelude::vec::Vec, storage::{Mapping, traits::ManualKey}};
     use scale::{Decode, Encode};
 
     #[ink(storage)]
     pub struct ChronicleContracts {
-        cars: Vec<CarData>,
+        cars: Mapping<AccountId, CarData>,
         owners: Vec<AccountId>,
     }
 
@@ -20,13 +20,13 @@ pub mod chronicle_contracts {
         model: String,
         vin: String,
         log: Vec<(String, String)>,
-        owner: AccountId,
+        car_identity: AccountId,
     }
 
     impl ChronicleContracts {
         #[ink(constructor)]
         pub fn new() -> Self {
-            let cars: Vec<CarData> = Vec::new();
+            let cars = Mapping::default();
             let owners: Vec<AccountId> = Vec::new();
             Self { cars, owners }
         }
@@ -35,5 +35,36 @@ pub mod chronicle_contracts {
         pub fn get_owners(&self) -> Vec<AccountId> {
             self.owners.clone()
         }
+
+        #[ink(message)]
+        pub fn get_single_car(&self, id: AccountId) -> Option<CarData> {
+            self.cars.get(id)
+        }
+
+        #[ink(message)]
+        pub fn add_car(&mut self, model: String, vin: String, log: Vec<(String, String)>, owner: AccountId) {
+            // ensure contract caller is the owner
+            assert_eq!(self.env().caller(), owner);
+
+            // ensure car is not already registered
+            assert!(!self.cars.contains(&owner));
+
+            // convert vin number to bytes
+            let bytes = vin.as_bytes();
+
+            // create identity on vin number
+            let car_identity = AccountId::try_from(bytes).expect("error creating account id");
+            
+            let car = CarData {
+                model,
+                vin,
+                log,
+                car_identity,
+            };
+            self.cars.insert(owner, &car);
+            self.owners.push(owner);
+        }
+
+
     }
 }
